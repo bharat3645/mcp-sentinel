@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mcp-sentinel"
-version = "0.1.0"
-description = "Offline risk scanner for MCP (Model Context Protocol) client configs -- zero network calls, zero dependencies."
+version = "0.2.0"
+description = "Offline risk scanner + lockfile/drift detection for MCP (Model Context Protocol) client configs -- zero network calls, zero dependencies."
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "Bharat Singh Parihar" }]
-keywords = ["mcp", "model-context-protocol", "security", "supply-chain", "cli"]
+keywords = ["mcp", "model-context-protocol", "security", "supply-chain", "lockfile", "cli"]
 classifiers = [
   "Programming Language :: Python :: 3",
   "License :: OSI Approved :: MIT License",
