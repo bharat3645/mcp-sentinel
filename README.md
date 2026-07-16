@@ -1,10 +1,17 @@
 # mcp-sentinel
 
-Offline risk scanner for [MCP](https://modelcontextprotocol.io) (Model Context
-Protocol) client configs. Point it at a `claude_desktop_config.json`,
-`.cursor/mcp.json`, `.vscode/mcp.json`, or any file using the same
-`mcpServers` shape, and it grades every configured server A-F based on
-concrete, explainable risk signals in how it's launched and configured.
+Offline risk scanner **and lockfile** for [MCP](https://modelcontextprotocol.io)
+(Model Context Protocol) client configs. Point it at a
+`claude_desktop_config.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, or any
+file using the same `mcpServers` shape, and it:
+
+- **`scan`** — grades every configured server A–F on concrete, explainable
+  risk signals in how it's launched and configured.
+- **`lock`** — pins every server (launch line, env var *names*, and
+  optionally its tool schemas) to `mcp-sentinel.lock`.
+- **`verify`** — fails CI when anything drifts from the lockfile. This is
+  rug-pull detection: the attack that ships 15 clean versions and then
+  silently changes a launch line or a tool description.
 
 **Zero network calls. Zero third-party dependencies.** It only reads the
 JSON file(s) you point it at — it never contacts a registry, never executes
@@ -17,9 +24,10 @@ MCP adoption has exploded through 2026 as the standard interoperability
 layer between AI agents and tools, which also means MCP server configs are
 now a real attack surface: floating `@latest` package pins that can change
 silently, servers launched through a shell with obscured commands,
-credentials pasted directly into config files, and typosquatted package
-names. Most of that is invisible at a glance in a JSON file. `mcp-sentinel`
-makes it visible.
+credentials pasted directly into config files, typosquatted package names —
+and servers that were clean when you installed them and mutated later.
+Most of that is invisible at a glance in a JSON file. `mcp-sentinel` makes
+it visible, and the lockfile makes *changes* to it visible.
 
 ## Install
 
@@ -31,7 +39,7 @@ pip install -e .
 
 Requires Python 3.9+. No other dependencies.
 
-## Usage
+## Scan
 
 ```bash
 # Scan a specific config file
@@ -40,37 +48,11 @@ mcp-sentinel scan ./mcp.json
 # Scan common client config locations automatically (read-only, best-effort)
 mcp-sentinel scan --auto
 
-# Scan multiple files, and fail (non-zero exit) if any overall score is below 70
-# -- handy in a pre-commit hook or CI job
+# Fail (non-zero exit) if any overall score is below 70 -- CI gate
 mcp-sentinel scan ./mcp.json ./.cursor/mcp.json --fail-under 70
 ```
 
-Example output:
-
-```
-tests/fixtures/risky.json
-==========================
-
-shell-wrapper  ->  grade D (45/100)
-   [CRIT] INLINE_SECRET: 'shell-wrapper' has what looks like a live credential hardcoded directly in env['GITHUB_TOKEN'] instead of referencing an environment variable or secret store.
-   [HIGH] SHELL_INDIRECTION: 'shell-wrapper' launches through a shell (bash) instead of invoking the server binary directly, which hides the real command from anyone reviewing the config at a glance.
-   [HIGH] SHELL_METACHARACTERS: 'shell-wrapper' contains shell metacharacters (;, &, |, or `$(...)`) in its command/args, which usually means multiple commands are being chained where only one server launch is expected.
-   [INFO] NO_PROVENANCE_NOTE: 'shell-wrapper' has no description/comment noting where it came from or why it's trusted -- harmless, but makes future review harder.
-
-sketchy-fs  ->  grade C (69/100)
-   [HIGH] POSSIBLE_TYPOSQUAT: 'sketchy-fs' uses package '@modelcontextprotocol/server-filesytem', which is suspiciously similar to the well-known '@modelcontextprotocol/server-filesystem' (99% match) but not identical -- verify this isn't a typosquat.
-   [MED]  UNPINNED_VERSION: 'sketchy-fs' launches '@modelcontextprotocol/server-filesytem' via npx with no version pin, so it resolves to whatever is newest at launch time.
-   [MED]  BROAD_FS_SCOPE: 'sketchy-fs' is granted '/' as a filesystem root, which is far broader than most MCP filesystem servers need -- scope it to a specific project directory instead.
-   [INFO] NO_PROVENANCE_NOTE: 'sketchy-fs' has no description/comment noting where it came from or why it's trusted -- harmless, but makes future review harder.
-
-floating  ->  grade B (85/100)
-   [HIGH] LATEST_TAG: 'floating' pins its package to @latest, so the exact code that runs can change silently on every launch with no review step.
-   [INFO] NO_PROVENANCE_NOTE: 'floating' has no description/comment noting where it came from or why it's trusted -- harmless, but makes future review harder.
-
-Overall: grade C (66/100)
-```
-
-## What it checks
+### What `scan` checks
 
 | Rule | Severity | What it catches |
 |---|---|---|
@@ -78,7 +60,7 @@ Overall: grade C (66/100)
 | `LATEST_TAG` | high | Package pinned to `@latest`, so the code that runs can change without review |
 | `SHELL_INDIRECTION` | high | Server launched via `bash -c` / `sh -c` / etc., which hides the real command |
 | `SHELL_METACHARACTERS` | high | `;`, `&`, `\|`, or `` `$(...)` `` in the command/args, suggesting chained commands |
-| `POSSIBLE_TYPOSQUAT` | high | Package name is a near-miss (80-99% similar) to a well-known MCP server package |
+| `POSSIBLE_TYPOSQUAT` | high | Package name is a near-miss (80–99% similar) to a well-known MCP server package |
 | `UNPINNED_VERSION` | medium | `npx`/`uvx`/`pipx` invocation with no version pin at all |
 | `BROAD_FS_SCOPE` | medium | Filesystem server granted a root as broad as `/`, `~`, or `/etc` |
 | `NO_PROVENANCE_NOTE` | info | No description/comment noting where the server came from |
@@ -88,12 +70,57 @@ Grading: each server starts at 100 and loses points per finding (critical
 B, 60+ a C, 40+ a D, below that an F. The overall grade is the average
 across all servers in the file.
 
+## Lock & verify (drift / rug-pull detection)
+
+```bash
+# Pin every server in the config to mcp-sentinel.lock
+mcp-sentinel lock ./mcp.json
+
+# Also pin a server's tool schemas from a tools/list response you captured
+# (e.g. from your client's logs or an MCP inspector). Repeatable.
+mcp-sentinel lock ./mcp.json --tools github=./github-tools.json
+
+# Later -- in CI, a pre-commit hook, or a cron job:
+mcp-sentinel verify ./mcp.json --tools github=./github-tools.json
+# exit 0 = no drift; exit 1 = drift (fails the build); exit 2 = error
+```
+
+Example drift output after a package version silently changed and a tool
+description mutated:
+
+```
+DRIFT: mcp.json no longer matches mcp-sentinel.lock:
+
+   [CRIT] args-changed: 'filesystem' launch args changed: [...@2.1.0...] -> [...@2.1.1...].
+   [CRIT] tools-changed: 'github' tool schema drifted from the locked hash -- tool
+          names, descriptions, or input schemas changed since you locked. This is
+          the rug-pull shape: re-review before trusting.
+```
+
+### What goes in the lockfile (and what deliberately doesn't)
+
+| Recorded | Not recorded |
+|---|---|
+| launch `command` + `args` | env var **values** — never stored, never hashed (a hash of a secret is an offline dictionary-attack target) |
+| env var **names** (sorted) | anything fetched from the network — tool schemas are hashed from a JSON file *you* captured |
+| canonical entry hash (`sha256:`) | |
+| tool-schema hash per server (optional) | |
+
+Drift severities: `command-changed` / `args-changed` / `tools-changed` →
+critical · `env-keys-changed` / `server-added` → high · `server-removed` →
+medium · tools capture with no pinned hash → info (re-run `lock`).
+
+Tool-schema hashing is order- and wrapper-insensitive: it accepts a raw
+`tools/list` response, a full JSON-RPC result, or a bare array, normalizes
+each tool to `{name, description, inputSchema}`, and sorts by name — so
+formatting changes don't produce false drift, but a single changed word in
+a tool description does.
+
 ## What it deliberately does *not* do
 
 - No network calls, ever — it won't hit npm/PyPI to check if a package
-  actually exists or has known CVEs. That's a reasonable follow-up (see
-  below) but changes the trust model of the tool itself, so it's out of
-  scope for v0.1.
+  actually exists or has known CVEs, and it won't query live MCP servers
+  for their tools (you capture those; it hashes them).
 - No execution of the scanned commands.
 - No allowlist/denylist of "safe" MCP servers — the typosquat check is
   similarity-based, not a verdict.
@@ -104,7 +131,15 @@ across all servers in the file.
 python -m unittest discover -s tests -v
 ```
 
-19 tests, stdlib `unittest` only (no `pytest` dependency required).
+37 tests, stdlib `unittest` only (no `pytest` dependency required). CI runs
+the suite on Python 3.9–3.13 plus a lock/verify dogfood roundtrip.
+
+## Related projects by the same author
+
+[`agent-rules-audit`](https://github.com/bharat3645/agent-rules-audit) —
+scanner for poisoned agent instruction files (AGENTS.md, .cursorrules,
+skills) | [`agent-tool-audit`](https://github.com/bharat3645/agent-tool-audit)
+— grades MCP tool descriptions for injection-susceptible phrasing
 
 ## Contributing
 
