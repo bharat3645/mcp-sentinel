@@ -20,10 +20,31 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: python -m unittest discover -s tests -v
-      - name: Dogfood — lock/verify roundtrip on the test fixture
+      - name: Dogfood -- lock/verify roundtrip on the test fixture
         run: |
           cd tests/fixtures
           python -m mcp_sentinel.cli lock clean.json
           python -m mcp_sentinel.cli verify clean.json
         env:
           PYTHONPATH: ${{ github.workspace }}
+
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: cargo test --all-targets
+      - run: cargo clippy --all-targets -- -D warnings
+      - name: Binary smoke test
+        run: |
+          cargo build --release
+          ./target/release/mcp-sentinel scan ../tests/fixtures/clean.json
+          ./target/release/mcp-sentinel --version
