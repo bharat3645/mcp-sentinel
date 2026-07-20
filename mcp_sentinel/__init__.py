@@ -7,4 +7,4 @@ and can pin every server (including captured tool schemas) to a lockfile so
 silent changes -- the rug-pull attack shape -- fail CI instead of shipping.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

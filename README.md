@@ -39,6 +39,37 @@ pip install -e .
 
 Requires Python 3.9+. No other dependencies.
 
+### Rust CLI (single binary, no Python required)
+
+`rust/` has a second implementation of the same `scan`/`lock`/`verify`
+CLI — same subcommands, same JSON schema, same lockfile format:
+
+```bash
+cd rust
+cargo build --release
+./target/release/mcp-sentinel scan ../tests/fixtures/clean.json
+```
+
+**Lockfiles are interchangeable between the two implementations.** Pin
+with the Python CLI, verify with the Rust binary, or vice versa — the
+Rust canonical-JSON serializer reproduces Python's
+`json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=True)`
+byte-for-byte (unicode escaping, key sorting, compact separators; see
+`rust/src/canonical.rs`), so `entryHash`/`toolsHash` values match exactly
+for the same input. The one documented exception: JSON integers are
+already in canonical form and round-trip byte-exact, but a tool schema
+containing a fractional/exponent number literal (e.g. `1.50` instead of
+`1.5`) could in principle canonicalize slightly differently between
+Rust's float formatting and Python's — not something realistic MCP tool
+schemas (which use integers for `minLength`/`maxLength`/etc.) run into in
+practice, but worth knowing if you hand-author unusual schemas.
+
+The typosquat-similarity rule (`POSSIBLE_TYPOSQUAT`) is a from-scratch
+Rust port of the Ratcliff/Obershelp algorithm behind Python's
+`difflib.SequenceMatcher.ratio()`, differentially tested against the real
+Python implementation across 3000 random string pairs plus every
+known-package test case before being ported — see `rust/src/rules.rs`.
+
 ## Scan
 
 ```bash
@@ -133,6 +164,19 @@ python -m unittest discover -s tests -v
 
 37 tests, stdlib `unittest` only (no `pytest` dependency required). CI runs
 the suite on Python 3.9–3.13 plus a lock/verify dogfood roundtrip.
+
+Rust port:
+
+```bash
+cd rust
+cargo test --all-targets
+cargo clippy --all-targets -- -D warnings
+```
+
+Unit tests per module (canonical JSON escaping, cross-language hash
+vectors, typosquat-ratio vectors) plus integration tests that spawn the
+compiled binary against `tests/fixtures/` and a full lock → verify →
+tamper round-trip.
 
 ## Related projects by the same author
 

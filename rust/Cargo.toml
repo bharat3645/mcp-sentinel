@@ -1,0 +1,26 @@
+[package]
+name = "mcp-sentinel"
+version = "0.1.0"
+edition = "2021"
+description = "Rust port of mcp-sentinel: offline risk scanner + lockfile for MCP client configs"
+license = "MIT"
+repository = "https://github.com/bharat3645/mcp-sentinel"
+keywords = ["mcp", "security", "supply-chain", "lockfile", "cli"]
+categories = ["command-line-utilities"]
+
+[[bin]]
+name = "mcp-sentinel"
+path = "src/main.rs"
+
+[lib]
+name = "mcp_sentinel"
+path = "src/lib.rs"
+
+# serde_json's "preserve_order" feature is deliberately NOT enabled: without
+# it, serde_json::Map is backed by a BTreeMap, so object keys iterate in
+# sorted order for free. That is load-bearing for canonical.rs, which relies
+# on it to match Python's json.dumps(..., sort_keys=True) byte-for-byte.
+[dependencies]
+serde_json = "1"
+sha2 = "0.10"
+regex = "1"
