@@ -491,11 +491,8 @@ mod tests {
             "newcomer".to_string(),
             json!({"command": "npx", "args": ["-y", "x@1.0.0"]}),
         );
-        let kinds: Vec<&str> = verify_lock(&e, &lock, &Map::new())
-            .unwrap()
-            .iter()
-            .map(|d| d.kind.as_str())
-            .collect();
+        let drifts = verify_lock(&e, &lock, &Map::new()).unwrap();
+        let kinds: Vec<&str> = drifts.iter().map(|d| d.kind.as_str()).collect();
         assert!(kinds.contains(&"server-removed"));
         assert!(kinds.contains(&"server-added"));
     }
@@ -505,11 +502,8 @@ mod tests {
         let lock = build_lock(&entries(), &Map::new(), "0.2.0").unwrap();
         let mut e = entries();
         e["github"]["env"]["AWS_SECRET_ACCESS_KEY"] = json!("${AWS_SECRET_ACCESS_KEY}");
-        let kinds: Vec<&str> = verify_lock(&e, &lock, &Map::new())
-            .unwrap()
-            .iter()
-            .map(|d| d.kind.as_str())
-            .collect();
+        let drifts = verify_lock(&e, &lock, &Map::new()).unwrap();
+        let kinds: Vec<&str> = drifts.iter().map(|d| d.kind.as_str()).collect();
         assert!(kinds.contains(&"env-keys-changed"));
     }
 
