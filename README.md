@@ -70,6 +70,41 @@ Rust port of the Ratcliff/Obershelp algorithm behind Python's
 Python implementation across 3000 random string pairs plus every
 known-package test case before being ported — see `rust/src/rules.rs`.
 
+"Byte-compatible" is checked two ways in CI, not just asserted: frozen
+hash vectors in `rust/src/lockfile.rs` (real values generated from the
+real Python package, pinned so any drift in either canonicalizer's output
+is caught immediately) *and* a live differential job
+(`tests/cross_lang_diff.sh`) that runs both real CLIs against the same
+fixtures on every push — including a `lock` with one implementation
+followed by a `verify` with the other, in both directions — and fails the
+build the moment they disagree, rather than only against a frozen
+snapshot.
+
+```mermaid
+flowchart LR
+    cfg["mcp.json /\nclaude_desktop_config.json"]
+    subgraph impl["two implementations, one format"]
+        direction TB
+        py["Python CLI\n(mcp_sentinel/)"]
+        rs["Rust CLI\n(rust/)"]
+    end
+    lock[("mcp-sentinel.lock\nentryHash / toolsHash")]
+    verify{"verify"}
+    drift(["DRIFT — exit 1,\nfails the build"])
+    clean(["no drift — exit 0"])
+
+    cfg --> py & rs
+    py -- lock --> lock
+    rs -- lock --> lock
+    lock --> verify
+    cfg -.rescan.-> verify
+    verify -- hash mismatch --> drift
+    verify -- hash match --> clean
+
+    style drift fill:#5a1f1f,stroke:#c0392b,color:#fff
+    style clean fill:#1f3d2b,stroke:#2ecc71,color:#fff
+```
+
 ## Scan
 
 ```bash

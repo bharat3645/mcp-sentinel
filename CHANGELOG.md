@@ -3,6 +3,45 @@
 All notable changes to this project are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/); versions follow SemVer.
 
+## [Unreleased]
+
+Production-polish sprint. A "byte-compatible lockfiles" claim from 0.3.0
+was checked directly against the real repo rather than taken on faith,
+and turned out to be true but under-verified and inconsistently applied:
+
+### Fixed
+- **The Rust binary reported `0.1.0`, not `0.3.0`.** The 0.3.0 CHANGELOG
+  entry below says "project version bumped to 0.3.0 to reflect the new
+  Rust distribution" — the Python side got the bump, the Rust crate never
+  did, in two places: `rust/Cargo.toml`'s `version` field, and (the real
+  root cause — bumping just the first one didn't fix `--version`, caught
+  by rebuilding and checking) a separately hardcoded `pub const VERSION:
+  &str = "0.1.0"` in `rust/src/lib.rs`, used for both `--version` output
+  and the `generatedBy` lockfile field. Fixed the constant to read from
+  Cargo.toml at compile time (`env!("CARGO_PKG_VERSION")`) instead of
+  duplicating it as a string literal, so the two can't drift again.
+- **`rust/Cargo.lock` was gitignored.** For a compiled binary (not a
+  library), an untracked lockfile means non-reproducible builds — anyone
+  building from a clean checkout gets whatever dependency versions
+  `cargo` resolves that day, not what was actually tested. Un-ignored and
+  committed the real lockfile.
+
+### Added
+- **Live cross-language differential test** (`tests/cross_lang_diff.sh`,
+  new `cross-lang` CI job): runs the real Python CLI and the real Rust
+  binary against the same fixtures — `clean.json`, `risky.json`, and a
+  rug-pulled tool schema — and diffs their lockfiles field-by-field
+  (`generatedBy` excluded, everything else must be byte-identical),
+  plus a full lock-with-one/verify-with-the-other round trip in both
+  directions. This is stronger than the existing frozen hash-vector
+  tests in `rust/src/lockfile.rs`: those pin real values but are a
+  static snapshot nothing forces to stay in sync; this job fails the
+  instant a real run diverges, on every push. Verified locally first —
+  all four checks pass against this session's real Python + real
+  compiled Rust binary.
+- Architecture diagram (Mermaid) showing the scan/lock/verify pipeline
+  and how both implementations converge on one lockfile format.
+
 ## [0.3.0] - 2026-07-20
 
 ### Added

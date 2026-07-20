@@ -48,3 +48,23 @@ jobs:
           cargo build --release
           ./target/release/mcp-sentinel scan ../tests/fixtures/clean.json
           ./target/release/mcp-sentinel --version
+
+  cross-lang:
+    # "Byte-compatible lockfiles" was previously only backed by frozen hash
+    # constants in rust/src/lockfile.rs (real values, but a static snapshot
+    # - nothing forces them to be regenerated if either implementation's
+    # hashing drifts). This job runs the real Python and real Rust CLIs on
+    # the same inputs and diffs their actual output on every push.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: bash tests/cross_lang_diff.sh
+        env:
+          PYTHONPATH: ${{ github.workspace }}

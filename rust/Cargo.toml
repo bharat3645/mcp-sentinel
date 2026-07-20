@@ -1,6 +1,6 @@
 [package]
 name = "mcp-sentinel"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 description = "Rust port of mcp-sentinel: offline risk scanner + lockfile for MCP client configs"
 license = "MIT"
