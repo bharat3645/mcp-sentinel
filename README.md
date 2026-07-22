@@ -1,5 +1,7 @@
 # mcp-sentinel
 
+[![CI](https://github.com/bharat3645/mcp-sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/bharat3645/mcp-sentinel/actions/workflows/ci.yml)
+
 Offline risk scanner **and lockfile** for [MCP](https://modelcontextprotocol.io)
 (Model Context Protocol) client configs. Point it at a
 `claude_desktop_config.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, or any
